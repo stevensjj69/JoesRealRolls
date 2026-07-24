@@ -1,0 +1,13 @@
+{
+  "id": "joes-real-rolls-bridge",
+  "title": "Joes Real Rolls Bridge",
+  "description": "Receives authenticated physical dice results from the Joes Real Rolls desktop application.",
+  "version": "1.5.1",
+  "authors": [{"name": "Joes Real Rolls"}],
+  "compatibility": {"minimum": "13", "verified": "14", "maximum": "14"},
+  "manifest": "https://raw.githubusercontent.com/stevensjj69/JoesRealRolls/main/module.json",
+  "download": "https://raw.githubusercontent.com/stevensjj69/JoesRealRolls/main/Joes-Real-Rolls-Foundry-Module-v1.5.1.zip",
+  "esmodules": ["scripts/dice-reader-bridge.js"],
+  "styles": ["styles/dice-reader-bridge.css"],
+  "socket": false
+}
