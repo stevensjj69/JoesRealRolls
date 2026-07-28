@@ -1,0 +1,101 @@
+name: Publish Foundry Module
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Module version to release (for example, 1.5.1)"
+        required: true
+        type: string
+      mode:
+        description: "Validate first; choose publish only after a successful dry run"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - publish
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release inputs and public files
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use semantic versioning, such as 1.5.1."
+            exit 1
+          fi
+
+          REF="v$VERSION"
+          MANIFEST_URL="https://raw.githubusercontent.com/stevensjj69/JoesRealRolls/$REF/module.json"
+          NOTES_URL="https://github.com/stevensjj69/JoesRealRolls/blob/$REF/RELEASE_NOTES.md"
+
+          curl --fail --silent --show-error --location "$MANIFEST_URL" --output module.json
+          curl --fail --silent --show-error --location "$NOTES_URL" --output /dev/null
+
+          MANIFEST_VERSION="$(jq -r '.version' module.json)"
+          if [[ "$MANIFEST_VERSION" != "$VERSION" ]]; then
+            echo "module.json version $MANIFEST_VERSION does not match requested version $VERSION."
+            exit 1
+          fi
+
+          DOWNLOAD_URL="$(jq -r '.download' module.json)"
+          curl --fail --silent --show-error --location "$DOWNLOAD_URL" --output module.zip
+          unzip -t module.zip >/dev/null
+
+      - name: Submit release request
+        env:
+          FOUNDRY_RELEASE_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FOUNDRY_RELEASE_TOKEN" ]]; then
+            echo "Repository secret FOUNDRY_RELEASE_TOKEN is not configured."
+            exit 1
+          fi
+
+          REF="v$VERSION"
+          MANIFEST_URL="https://raw.githubusercontent.com/stevensjj69/JoesRealRolls/$REF/module.json"
+          NOTES_URL="https://github.com/stevensjj69/JoesRealRolls/blob/$REF/RELEASE_NOTES.md"
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg manifest "$MANIFEST_URL" \
+            --arg notes "$NOTES_URL" \
+            --arg mode "$MODE" \
+            '{
+              id: "joes-real-rolls-bridge",
+              release: {
+                version: $version,
+                manifest: $manifest,
+                notes: $notes,
+                compatibility: {
+                  minimum: "13",
+                  verified: "14",
+                  maximum: "14"
+                }
+              }
+            } + (if $mode == "dry-run" then {"dry-run": true} else {} end)' > request.json
+
+          HTTP_STATUS="$(curl --silent --show-error \
+            --output response.json \
+            --write-out "%{http_code}" \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --header "Authorization: $FOUNDRY_RELEASE_TOKEN" \
+            --data @request.json \
+            https://foundryvtt.com/_api/packages/release_version/)"
+
+          cat response.json
+          if [[ "$HTTP_STATUS" != "200" ]] || [[ "$(jq -r '.status // empty' response.json)" != "success" ]]; then
+            echo "Foundry release request failed with HTTP $HTTP_STATUS."
+            exit 1
+          fi
