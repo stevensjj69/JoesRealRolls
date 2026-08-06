@@ -1,0 +1,7 @@
+{
+  "globalHeaders": {
+    "Content-Security-Policy": "frame-ancestors 'self' https://whop.com https://*.whop.com;",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff"
+  }
+}
